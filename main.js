@@ -2,6 +2,40 @@ const path = require('path')
 const fs = require('fs')
 const UPNG = require('./UPNG.js');
 const assert = require('assert');
+const parseCommandLine = require('command-line-args');
+const generateUsage = require('command-line-usage');
+
+const commandLine = {
+    optionDefinitions: [
+        { name: 'encoded', alias: 'e', defaultValue: "encoded.png" },
+        { name: 'decoded', alias: 'd', type: String, defaultValue: "decoded.png" },
+        { name: 'original', alias: 'o', type: String, defaultValue: "original.png" },
+        { name: 'secret', alias: 's', type: String, defaultValue: "secret.png" },
+        { name: 'help', alias: 'h', type: Boolean, defaultValue: false },
+    ],
+
+    get usageOptions() {
+        // We must do this stupid song/dance in order to capture the proper
+        // `this`.
+        return function (that) {
+            return [
+                {
+                    header: 'stenosaurus',
+                    content: 'Hide a BW image (8bpc Grayscale) inside any full-color PNG.'
+                },
+                {
+                    header: 'Options',
+                    get optionList() {
+                        return that.optionDefinitions
+                    },
+                },
+            ];
+        }(this)
+    },
+    get usageString() {
+        return generateUsage(this.usageOptions)
+    },
+}
 
 /*
  * The image at `haystackFilePath` should be a 16-bit-depth RGB PNG. The needle should be encoded
@@ -17,7 +51,7 @@ function encode(haystackFilePath, needleFilePath, encodedFilePath) {
         haystack = fs.readFileSync(haystackFilePath)
         needle = fs.readFileSync(needleFilePath)
     } catch (error) {
-        return (false, error)
+        return [false, error]
     }
 
     assert(haystack != null)
@@ -27,6 +61,10 @@ function encode(haystackFilePath, needleFilePath, encodedFilePath) {
     const haystackData = haystackImage.data
     const needleImage = UPNG.decode(needle)
     const needleData = needleImage.data
+
+    if (needleImage.height != haystackImage.height || needleImage.width != haystackImage.width) {
+        return [false, Error("Original and secret message do not have matching dimensions.")]
+    }
 
     // for the red channel of every pixel in the haystack, compare the 
     // black/white-ness of the pixel in the needle. If the pixel in the needle
@@ -51,10 +89,10 @@ function encode(haystackFilePath, needleFilePath, encodedFilePath) {
     try {
         fs.writeFileSync(encodedFilePath, Buffer.from(encoded))
     } catch (error) {
-        return (false, error)
+        return [false, error]
     }
 
-    return (true, null)
+    return [true, null]
 }
 
 function isEven(eoro) {
@@ -84,19 +122,41 @@ function decode(encodedFilePath, decodedFilePath) {
     fs.writeFileSync(decodedFilePath, Buffer.from(decoded))
 }
 
-var taylorFilePath = path.join(path.dirname('./'), "original.png")
-var hiddenFilePath = path.join(path.dirname('./'), "secret.png")
-var encodedFilePath = path.join(path.dirname('./'), "encoded.png")
-var decodedFilePath = path.join(path.dirname('./'), "decoded.png")
-var encode_result, encode_error = encode(taylorFilePath, hiddenFilePath, encodedFilePath)
-if (encode_result == false) {
-    console.log(`Error encoding: ${encode_error}`)
-} else {
-    console.log("Encoding successful.")
+function main(args) {
+
+    const commandLineOptions = parseCommandLine(commandLine.optionDefinitions)
+
+    if (commandLineOptions['help']) {
+        console.log(commandLine.usageString)
+        return
+    }
+
+    var originalFilePath, secretFilePath, encodedFilePath, decodedFilePath;
+    try {
+        originalFilePath = path.join(path.dirname('./'), commandLineOptions['original'])
+        secretFilePath = path.join(path.dirname('./'), commandLineOptions['secret'])
+        encodedFilePath = path.join(path.dirname('./'), commandLineOptions['encoded'])
+        decodedFilePath = path.join(path.dirname('./'), commandLineOptions['decoded'])
+    } catch (err) {
+        console.log(`There was an error opening one of the required files: ${err}!`)
+        return
+    }
+
+
+    var [encode_result, encode_error] = encode(originalFilePath, secretFilePath, encodedFilePath)
+    if (encode_result == false) {
+        console.log(`Error encoding: ${encode_error}`)
+        return
+    } else {
+        console.log("Encoding successful.")
+    }
+    var decode_result, decode_error = decode(encodedFilePath, decodedFilePath)
+    if (decode_result == false) {
+        console.log(`Error decoding: ${decode_error}`)
+        return
+    } else {
+        console.log("Decoding successful.")
+    }
 }
-var decode_result, decode_error = decode(encodedFilePath, decodedFilePath)
-if (decode_result == false) {
-    console.log(`Error decoding: ${decode_error}`)
-} else {
-    console.log("Decoding successful.")
-}
+
+main(process.argv)

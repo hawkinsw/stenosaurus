@@ -5,6 +5,8 @@
   },
   "dependencies": {
     "@types/upng-js": "^2.1.2",
+    "command-line-args": "^5.2.1",
+    "command-line-usage": "^7.0.1",
     "pako": "^2.1.0",
     "upng-js": "^2.1.0",
     "uzip": "^0.20201231.0"
